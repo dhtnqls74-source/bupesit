@@ -3,496 +3,247 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>전자책 편집기</title>
+    <title>HTML to EPUB 변환기</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6;
-            color: #1f2937;
+            font-family: 'Noto Sans KR', sans-serif;
         }
-        .container {
-            max-width: 900px;
-            margin: auto;
+        .preview-content {
+            background-color: #E6E0F8;
+            color: #333;
             padding: 2rem;
+            border-radius: 0.5rem;
+            height: 100%;
+            overflow-y: auto;
         }
-        .editor-container {
-            min-height: 500px;
+        .preview-content h1, .preview-content h2, .preview-content p {
+            font-family: 'Noto Sans KR', sans-serif;
         }
-        .editor-header {
-            border-bottom: 1px solid #e5e7eb;
-            padding-bottom: 1rem;
+        .preview-content h1 {
+            font-size: 2em;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .preview-content h2 {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid #C0B8DD;
+            padding-bottom: 0.25rem;
+        }
+        .preview-content p {
+            font-size: 1em;
+            line-height: 1.8;
+            text-align: justify;
             margin-bottom: 1rem;
         }
-        .editor-header input {
-            font-size: 1.5rem;
-            font-weight: 600;
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #6D28D9;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
         }
-        .controls {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid #e5e7eb;
-            margin-bottom: 1rem;
-        }
-        .controls button, .controls select {
-            background-color: #fff;
-            border: 1px solid #d1d5db;
-            border-radius: 0.5rem;
-            padding: 0.5rem 1rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .controls button:hover, .controls select:hover {
-            background-color: #f9fafb;
-            border-color: #9ca3af;
-        }
-        .controls button.active {
-            background-color: #1f2937;
-            color: #fff;
-        }
-        #editor {
-            background-color: #fff;
-            padding: 1.5rem;
-            border-radius: 0.5rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            outline: none;
-            cursor: text;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
+    <!-- Chosen Palette: Lavender Bliss -->
+    <!-- Application Structure Plan: A two-column, task-oriented layout was chosen for clarity and ease of use. The left column serves as the control panel for all user inputs (metadata, HTML content), while the right column provides a live, styled preview. This separation of concerns allows the user to see the immediate effect of their HTML input. The final action, generating the EPUB, is a prominent button. This flow is intuitive: configure, input, preview, generate. -->
+    <!-- Visualization & Content Choices: The core of this application is not data visualization but content transformation. Info: User-provided HTML. Goal: Structure and convert to EPUB. Presentation: A `textarea` for input and a styled `div` for a live preview. Interaction: The user's HTML input dynamically updates the preview pane. Justification: This provides immediate visual feedback, which is crucial for a content creation tool. The final output is a downloadable file. Library/Method: Vanilla JS for the live preview and the JSZip library (via CDN) to construct the .epub file package on the client side. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
 </head>
-<body class="bg-gray-100 p-8">
-    <div class="container bg-white rounded-xl shadow-lg p-8">
-        <h1 class="text-3xl font-bold mb-6 text-center">전자책 편집기</h1>
-        
-        <!-- 커버 이미지 섹션 -->
-        <div class="flex flex-col items-center mb-8 p-4 border rounded-lg bg-gray-50">
-            <h2 class="text-xl font-semibold mb-4">표지 이미지</h2>
-            <input type="file" id="coverImageInput" accept="image/*" class="hidden">
-            <label for="coverImageInput" id="coverImageLabel" class="cursor-pointer bg-gray-200 rounded-lg p-8 text-gray-500 text-center hover:bg-gray-300 transition-colors">
-                클릭하여 표지 이미지 업로드
-            </label>
-            <img id="coverImagePreview" src="#" alt="Cover Preview" class="mt-4 rounded-lg shadow-md hidden max-h-64 object-contain">
-        </div>
-        
-        <!-- 제목 및 저자 입력 섹션 -->
-        <div class="mb-6 p-4 border rounded-lg bg-gray-50">
-            <div class="mb-4">
-                <label for="bookTitle" class="block text-sm font-medium text-gray-700">제목:</label>
-                <input type="text" id="bookTitle" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2" placeholder="책 제목을 입력하세요">
-            </div>
-            <div>
-                <label for="bookAuthor" class="block text-sm font-medium text-gray-700">저자:</label>
-                <input type="text" id="bookAuthor" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2" placeholder="저자 이름을 입력하세요">
-            </div>
-        </div>
+<body class="bg-gray-100 text-gray-800">
 
-        <!-- 편집기 컨트롤 -->
-        <div class="controls mb-6">
-            <!-- 텍스트 스타일 변경 -->
-            <button id="boldButton" class="rounded-lg shadow-sm font-bold p-2">굵게</button>
-            <button id="italicButton" class="rounded-lg shadow-sm italic p-2">기울임</button>
-            <button id="underlineButton" class="rounded-lg shadow-sm underline p-2">밑줄</button>
-            
-            <!-- 정렬 -->
-            <button id="alignLeft" class="rounded-lg shadow-sm p-2">왼쪽 정렬</button>
-            <button id="alignCenter" class="rounded-lg shadow-sm p-2">중앙 정렬</button>
-            <button id="alignRight" class="rounded-lg shadow-sm p-2">오른쪽 정렬</button>
-            
-            <!-- 문단 간격 -->
-            <select id="lineHeight" class="rounded-lg shadow-sm p-2">
-                <option value="">문단 간격</option>
-                <option value="1.0">1.0</option>
-                <option value="1.5">1.5</option>
-                <option value="2.0">2.0</option>
-            </select>
-            
-            <!-- 글자 크기 -->
-            <select id="fontSize" class="rounded-lg shadow-sm p-2">
-                <option value="">글자 크기</option>
-                <option value="12px">12px</option>
-                <option value="16px">16px</option>
-                <option value="20px">20px</option>
-                <option value="24px">24px</option>
-            </select>
-            
-            <!-- 목차 삽입 -->
-            <button id="insertTocButton" class="rounded-lg shadow-sm p-2 bg-indigo-500 text-white hover:bg-indigo-600 transition-colors">목차 삽입</button>
-        </div>
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-violet-800">HTML to EPUB 변환기</h1>
+            <p class="text-lg text-gray-600 mt-2">간단한 HTML 코드로 나만의 EPUB 전자책을 만들어보세요.</p>
+        </header>
 
-        <!-- 본문 편집 영역 -->
-        <div id="editor" class="editor-container bg-white p-6 rounded-lg shadow-md mb-6" contenteditable="true">
-            <h1 class="text-2xl font-bold mb-4">본문 내용을 여기에 입력하세요.</h1>
-            <p>문단을 시작하고 내용을 작성해 보세요.</p>
-        </div>
-        
-        <!-- EPUB 변환 버튼 -->
-        <div class="text-center">
-            <button id="convertButton" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition-colors">
-                EPUB으로 변환
-            </button>
-        </div>
-        
-        <!-- 다운로드 링크 (숨김) -->
-        <a id="downloadLink" class="hidden"></a>
-
-        <!-- 알림 메시지 박스 -->
-        <div id="messageBox" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden">
-            <div class="bg-white rounded-lg p-6 shadow-xl text-center">
-                <p id="messageText" class="text-lg font-medium mb-4"></p>
-                <button id="closeButton" class="bg-blue-500 text-white py-2 px-4 rounded-lg">확인</button>
+        <main class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h2 class="text-2xl font-bold mb-4 border-b pb-2">정보 입력</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="bookTitle" class="block text-sm font-medium text-gray-700">책 제목</label>
+                        <input type="text" id="bookTitle" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500" placeholder="예: 연구 시작">
+                    </div>
+                    <div>
+                        <label for="bookAuthor" class="block text-sm font-medium text-gray-700">저자</label>
+                        <input type="text" id="bookAuthor" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500" placeholder="예: 홍길동">
+                    </div>
+                    <div>
+                        <label for="htmlContent" class="block text-sm font-medium text-gray-700">HTML 콘텐츠</label>
+                        <textarea id="htmlContent" rows="15" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-violet-500 focus:border-violet-500" placeholder="<h1>제목</h1><p>여기에 내용을 입력하세요...</p>"></textarea>
+                    </div>
+                    <button id="generateBtn" class="w-full bg-violet-700 text-white font-bold py-3 px-4 rounded-lg hover:bg-violet-800 transition-colors duration-300 flex items-center justify-center">
+                        <span id="btnText">EPUB 생성하기</span>
+                        <div id="btnLoader" class="loader hidden" style="width: 20px; height: 20px; border-width: 2px;"></div>
+                    </button>
+                </div>
             </div>
-        </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-lg flex flex-col">
+                <h2 class="text-2xl font-bold mb-4 border-b pb-2">실시간 미리보기</h2>
+                <div id="preview" class="preview-content flex-grow">
+                    <h1>제목</h1>
+                    <p>이곳에서 콘텐츠가 어떻게 보일지 확인할 수 있습니다.</p>
+                </div>
+            </div>
+        </main>
     </div>
 
     <script>
-        const editor = document.getElementById('editor');
-        const boldButton = document.getElementById('boldButton');
-        const italicButton = document.getElementById('italicButton');
-        const underlineButton = document.getElementById('underlineButton');
-        const alignLeft = document.getElementById('alignLeft');
-        const alignCenter = document.getElementById('alignCenter');
-        const alignRight = document.getElementById('alignRight');
-        const lineHeightSelect = document.getElementById('lineHeight');
-        const fontSizeSelect = document.getElementById('fontSize');
-        const insertTocButton = document.getElementById('insertTocButton');
-        const coverImageInput = document.getElementById('coverImageInput');
-        const coverImagePreview = document.getElementById('coverImagePreview');
-        const coverImageLabel = document.getElementById('coverImageLabel');
         const bookTitleInput = document.getElementById('bookTitle');
         const bookAuthorInput = document.getElementById('bookAuthor');
-        const convertButton = document.getElementById('convertButton');
-        const downloadLink = document.getElementById('downloadLink');
-        const messageBox = document.getElementById('messageBox');
-        const messageText = document.getElementById('messageText');
-        const closeButton = document.getElementById('closeButton');
+        const htmlContentInput = document.getElementById('htmlContent');
+        const preview = document.getElementById('preview');
+        const generateBtn = document.getElementById('generateBtn');
+        const btnText = document.getElementById('btnText');
+        const btnLoader = document.getElementById('btnLoader');
+
+        htmlContentInput.addEventListener('input', updatePreview);
         
-        // 메시지 박스 표시 함수
-        function showMessage(message) {
-            messageText.textContent = message;
-            messageBox.classList.remove('hidden');
+        function updatePreview() {
+            preview.innerHTML = htmlContentInput.value;
         }
-
-        // 메시지 박스 숨김
-        closeButton.addEventListener('click', () => {
-            messageBox.classList.add('hidden');
-        });
-
-        // 텍스트 스타일 변경 기능
-        boldButton.addEventListener('click', () => {
-            document.execCommand('bold', false, null);
-            boldButton.classList.toggle('active');
-        });
         
-        italicButton.addEventListener('click', () => {
-            document.execCommand('italic', false, null);
-            italicButton.classList.toggle('active');
-        });
-        
-        underlineButton.addEventListener('click', () => {
-            document.execCommand('underline', false, null);
-            underlineButton.classList.toggle('active');
-        });
-
-        // 정렬 기능
-        alignLeft.addEventListener('click', () => document.execCommand('justifyLeft', false, null));
-        alignCenter.addEventListener('click', () => document.execCommand('justifyCenter', false, null));
-        alignRight.addEventListener('click', () => document.execCommand('justifyRight', false, null));
-        
-        // 문단 간격 변경
-        lineHeightSelect.addEventListener('change', (e) => {
-            const selectedLineHeight = e.target.value;
-            if (selectedLineHeight) {
-                document.execCommand('formatBlock', false, 'p');
-                const selection = window.getSelection();
-                if (selection.rangeCount > 0) {
-                    const range = selection.getRangeAt(0);
-                    const parentElement = range.commonAncestorContainer.parentNode;
-                    if (parentElement.tagName === 'P') {
-                        parentElement.style.lineHeight = selectedLineHeight;
-                    }
-                }
-            }
-        });
-        
-        // 글자 크기 변경
-        fontSizeSelect.addEventListener('change', (e) => {
-            const selectedSize = e.target.value;
-            if (selectedSize) {
-                document.execCommand('fontSize', false, '7'); // 폰트 크기 변경 명령
-                const fontElements = document.getElementsByTagName('font');
-                for (let i = 0; i < fontElements.length; i++) {
-                    if (fontElements[i].size === '7') {
-                        fontElements[i].removeAttribute('size');
-                        fontElements[i].style.fontSize = selectedSize;
-                    }
-                }
-            }
-        });
-
-        // 목차 삽입 기능: EPUB에서 인식하는 목차용 <h1> 태그를 삽입합니다.
-        insertTocButton.addEventListener('click', () => {
-            const selection = window.getSelection();
-            if (selection.rangeCount > 0) {
-                const range = selection.getRangeAt(0);
-                const tocHtml = `<h1 data-type="toc">목차</h1><p>여기에 본문 내용을 작성해 주세요.</p>`;
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = tocHtml;
-                range.deleteContents();
-                range.insertNode(tempDiv.firstChild);
-            } else {
-                editor.innerHTML += `<h1 data-type="toc">목차</h1><p>여기에 본문 내용을 작성해 주세요.</p>`;
-            }
-        });
-        
-        // 커버 이미지 업로드 미리보기
-        coverImageInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    coverImagePreview.src = event.target.result;
-                    coverImagePreview.classList.remove('hidden');
-                    coverImageLabel.textContent = file.name;
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-
-        // 붙여넣기 기능 개선: 서식 없는 텍스트만 붙여넣도록 함
-        editor.addEventListener('paste', (e) => {
-            e.preventDefault();
-            const text = (e.clipboardData || window.clipboardData).getData('text/plain');
-            document.execCommand('insertText', false, text);
-        });
-
-        // 텍스트 기반 태그 자동 변환 기능 추가
-        editor.addEventListener('input', (e) => {
-            let html = editor.innerHTML;
+        generateBtn.addEventListener('click', async () => {
+            const title = bookTitleInput.value || 'Untitled';
+            const author = bookAuthorInput.value || 'Unknown Author';
+            const content = htmlContentInput.value || '<p>No content provided.</p>';
             
-            // 굵게 변환 (예: **텍스트**)
-            html = html.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-
-            // 기울임 변환 (예: *텍스트*)
-            html = html.replace(/\*(.*?)\*/g, '<i>$1</i>');
-
-            // 밑줄 변환 (예: _텍스트_)
-            html = html.replace(/_(.*?)_/g, '<u>$1</u>');
-
-            // 변경된 HTML을 다시 에디터에 적용
-            if (editor.innerHTML !== html) {
-                const selection = window.getSelection();
-                const range = document.createRange();
-                editor.innerHTML = html;
-                
-                // 커서 위치 복원 (단, 간단한 구현이므로 완벽하지 않을 수 있습니다.)
-                range.selectNodeContents(editor);
-                range.collapse(false);
-                selection.removeAllRanges();
-                selection.addRange(range);
-            }
-        });
-
-        // EPUB 변환 기능
-        convertButton.addEventListener('click', async () => {
-            const title = bookTitleInput.value.trim() || "제목 없음";
-            const author = bookAuthorInput.value.trim() || "저자 미상";
-            const coverImage = coverImagePreview.src !== '#' ? coverImagePreview.src : null;
-            
-            if (title === "제목 없음" || editor.innerHTML.trim() === "") {
-                showMessage('제목과 본문 내용을 입력해주세요.');
+            if (!content) {
+                alert('HTML 콘텐츠를 입력해주세요.');
                 return;
             }
 
-            // EPUB 파일을 생성하기 전에 HTML 컨텐츠를 정리하는 함수
-            const cleanHtmlContent = (html) => {
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = html;
-                
-                // 불필요한 태그 제거 및 텍스트 노드 정리
-                const childNodes = Array.from(tempDiv.childNodes);
-                const processedNodes = [];
+            setLoading(true);
 
-                for (const node of childNodes) {
-                    // 텍스트 노드와 <br> 태그를 <p> 태그로 묶음
-                    if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== '') {
-                        const p = document.createElement('p');
-                        p.textContent = node.textContent.trim();
-                        processedNodes.push(p);
-                    } else if (node.tagName === 'BR') {
-                        // <br> 태그는 문단으로 처리
-                        if (processedNodes.length > 0 && processedNodes[processedNodes.length - 1].tagName === 'P') {
-                            // 이미 <p> 태그가 있으면 새 문단 추가하지 않음
-                        } else {
-                           processedNodes.push(document.createElement('p'));
-                        }
-                    } else if (node.nodeType === Node.ELEMENT_NODE) {
-                        processedNodes.push(node);
-                    }
-                }
+            try {
+                const zip = new JSZip();
 
-                // 정리된 노드들을 다시 HTML 문자열로 변환
-                let cleanedHtml = processedNodes.map(node => node.outerHTML).join('');
-                
-                // 연속된 <p></p> 태그 정리
-                cleanedHtml = cleanedHtml.replace(/<p><\/p>/g, '');
-                
-                return cleanedHtml;
-            };
+                const mimetype = "application/epub+zip";
+                zip.file("mimetype", mimetype, {compression: "STORE"});
 
-            // EPUB 파일을 생성하는 함수
-            const createEpub = (title, author, coverImage, contentHtml) => {
-                try {
-                    const zip = new JSZip();
-                    
-                    // 1. mimetype 파일 생성
-                    zip.file("mimetype", "application/epub+zip");
-                    
-                    // 2. EPUB 컨텐츠 분할
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = contentHtml;
-                    const childNodes = Array.from(tempDiv.childNodes);
-                    
-                    const chapters = [];
-                    let currentChapter = [];
-                    let chapterId = 0;
-                    let hasToc = false;
-
-                    // TOC 포함 여부 확인
-                    const tocElement = editor.querySelector('h1[data-type="toc"]');
-                    if (tocElement) {
-                        hasToc = true;
-                        // TOC 컨텐츠는 별도로 처리
-                        const tocContent = `<h1 id="toc-page" class="toc-title">${tocElement.textContent}</h1>`;
-                        chapters.push({ id: 'toc', title: tocElement.textContent, html: tocContent });
-                    }
-                    
-                    // 본문 컨텐츠를 <h1> 태그 기준으로 분할
-                    for (const node of childNodes) {
-                        if (node.tagName === 'H1' && node !== tocElement) {
-                            if (currentChapter.length > 0) {
-                                chapterId++;
-                                const chapterTitle = currentChapter.find(n => n.tagName === 'H1').textContent;
-                                const chapterHtml = currentChapter.map(n => n.outerHTML).join('');
-                                chapters.push({ id: `chapter${chapterId}`, title: chapterTitle, html: chapterHtml });
-                                currentChapter = [];
-                            }
-                        }
-                        // 첫 H1 이전의 컨텐츠도 첫 챕터에 포함
-                        if (node !== tocElement) {
-                           currentChapter.push(node);
-                        }
-                    }
-                    if (currentChapter.length > 0) {
-                        chapterId++;
-                        const chapterTitle = currentChapter.find(n => n.tagName === 'H1') ? currentChapter.find(n => n.tagName === 'H1').textContent : '시작';
-                        const chapterHtml = currentChapter.map(n => n.outerHTML).join('');
-                        chapters.push({ id: `chapter${chapterId}`, title: chapterTitle, html: chapterHtml });
-                    }
-
-                    if (chapters.length === 0) {
-                        chapters.push({ id: 'main', title: '본문', html: editor.innerHTML });
-                    }
-
-                    // 3. OEBPS/nav.xhtml 파일 생성
-                    const navXhtml = `<?xml version="1.0" encoding="UTF-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-    <head>
-        <title>목차</title>
-    </head>
-    <body>
-        <nav epub:type="toc" id="toc">
-            <h2>목차</h2>
-            <ol>
-                ${chapters.map(ch => `<li><a href="${ch.id}.xhtml">${ch.title}</a></li>`).join('')}
-            </ol>
-        </nav>
-    </body>
-</html>`;
-                    zip.file("OEBPS/nav.xhtml", navXhtml);
-                    
-                    // 4. OEBPS/content.opf 파일 생성
-                    const opfContent = `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="pub-id" version="3.0">
-    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-        <dc:title id="title">${title}</dc:title>
-        <dc:creator id="creator" opf:role="aut">${author}</dc:creator>
-        <dc:language>ko-KR</dc:language>
-        <meta property="dcterms:modified">${new Date().toISOString().split('.')[0]+'Z'}</meta>
-        <meta property="schema:accessibilitySummary">This publication conforms to EPUB 3.0.1.</meta>
-        <dc:identifier id="pub-id">urn:uuid:${crypto.randomUUID()}</dc:identifier>
-        ${coverImage ? `<item id="cover-image" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/>` : ''}
-    </metadata>
-    <manifest>
-        <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
-        ${chapters.map(ch => `<item id="${ch.id}" href="${ch.id}.xhtml" media-type="application/xhtml+xml"/>`).join('')}
-        ${coverImage ? `<item id="cover-image" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/>` : ''}
-    </manifest>
-    <spine>
-        ${chapters.map(ch => `<itemref idref="${ch.id}"/>`).join('')}
-    </spine>
-</package>`;
-                    zip.file("OEBPS/content.opf", opfContent);
-
-                    // 5. OEBPS/chapter.xhtml 파일들 생성
-                    chapters.forEach(ch => {
-                        const chapterXhtml = `<?xml version="1.0" encoding="UTF-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml">
-    <head>
-        <title>${ch.title}</title>
-    </head>
-    <body>
-        ${ch.html}
-    </body>
-</html>`;
-                        zip.file(`OEBPS/${ch.id}.xhtml`, chapterXhtml);
-                    });
-
-                    // 6. META-INF/container.xml 파일 생성
-                    const containerXml = `<?xml version="1.0"?>
+                const containerXml = `<?xml version="1.0" encoding="UTF-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-    <rootfiles>
-        <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
-    </rootfiles>
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
 </container>`;
-                    zip.file("META-INF/container.xml", containerXml);
-                    
-                    // 7. 커버 이미지 추가
-                    if (coverImage) {
-                        const imageBase64 = coverImage.split(',')[1];
-                        zip.file("OEBPS/images/cover.jpg", imageBase64, { base64: true });
-                    }
+                zip.folder("META-INF").file("container.xml", containerXml);
 
-                    // 8. ZIP 파일 생성 및 다운로드
-                    zip.generateAsync({ type: "blob" })
-                        .then(function(blob) {
-                            const url = URL.createObjectURL(blob);
-                            downloadLink.href = url;
-                            downloadLink.download = `${title}.epub`;
-                            downloadLink.click();
-                            showMessage('EPUB 파일이 성공적으로 생성되었습니다!');
-                        });
+                const uuid = `urn:uuid:${self.crypto.randomUUID()}`;
+                const now = new Date().toISOString().slice(0, 19) + 'Z';
+                
+                const contentOpf = `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <dc:title>${title}</dc:title>
+    <dc:creator opf:role="aut">${author}</dc:creator>
+    <dc:identifier id="BookId" opf:scheme="UUID">${uuid}</dc:identifier>
+    <dc:language>ko</dc:language>
+    <meta name="dtb:uid" content="${uuid}"/>
+    <meta name="dtb:depth" content="1"/>
+    <meta name="dtb:totalPageCount" content="0"/>
+    <meta name="dtb:maxPageNumber" content="0"/>
+    <dc:date>${now}</dc:date>
+  </metadata>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="content" href="content.xhtml" media-type="application/xhtml+xml"/>
+    <item id="css" href="style.css" media-type="text/css"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="content"/>
+  </spine>
+</package>`;
+                zip.folder("OEBPS").file("content.opf", contentOpf);
+                
+                const tocNcx = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta name="dtb:uid" content="${uuid}"/>
+    <meta name="dtb:depth" content="1"/>
+    <meta name="dtb:totalPageCount" content="0"/>
+    <meta name="dtb:maxPageNumber" content="0"/>
+  </head>
+  <docTitle><text>${title}</text></docTitle>
+  <navMap>
+    <navPoint id="navPoint-1" playOrder="1">
+      <navLabel><text>시작</text></navLabel>
+      <content src="content.xhtml"/>
+    </navPoint>
+  </navMap>
+</ncx>`;
+                zip.folder("OEBPS").file("toc.ncx", tocNcx);
 
-                } catch (error) {
-                    showMessage('EPUB 생성 중 오류가 발생했습니다: ' + error.message);
-                }
-            };
-            
-            // JSZip 라이브러리 동적 로드
-            const script = document.createElement('script');
-            script.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js";
-            script.onload = () => {
-                const cleanedContent = cleanHtmlContent(editor.innerHTML);
-                createEpub(title, author, coverImage, cleanedContent);
-            };
-            script.onerror = () => {
-                showMessage('JSZip 라이브러리를 로드하는 데 실패했습니다. 다시 시도해주세요.');
-            };
-            document.head.appendChild(script);
+                const css = `
+body { background-color: #E6E0F8; color: #333; font-family: 'Noto Sans KR', sans-serif; }
+h1, h2, p { font-family: 'Noto Sans KR', sans-serif; }
+h1 { font-size: 2em; font-weight: bold; text-align: center; margin-bottom: 2rem; }
+h2 { font-size: 1.5em; font-weight: bold; margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 1px solid #C0B8DD; padding-bottom: 0.25rem; }
+p { font-size: 1em; line-height: 1.8; text-align: justify; margin-bottom: 1rem; }
+                `;
+                zip.folder("OEBPS").file("style.css", css);
+
+                const contentXhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>${title}</title>
+  <link rel="stylesheet" type="text/css" href="style.css" />
+</head>
+<body>
+  ${content}
+</body>
+</html>`;
+                zip.folder("OEBPS").file("content.xhtml", contentXhtml);
+
+                const blob = await zip.generateAsync({
+                    type: "blob",
+                    mimeType: "application/epub+zip"
+                });
+
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = `${title.replace(/ /g, '_')}.epub`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (error) {
+                console.error("EPUB 생성 오류:", error);
+                alert("EPUB 파일을 생성하는 중 오류가 발생했습니다. 콘솔을 확인해주세요.");
+            } finally {
+                setLoading(false);
+            }
         });
-        
+
+        function setLoading(isLoading) {
+            if (isLoading) {
+                generateBtn.disabled = true;
+                btnText.classList.add('hidden');
+                btnLoader.classList.remove('hidden');
+            } else {
+                generateBtn.disabled = false;
+                btnText.classList.remove('hidden');
+                btnLoader.classList.add('hidden');
+            }
+        }
+
+        updatePreview();
     </script>
+
 </body>
 </html>
